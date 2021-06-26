@@ -1,0 +1,641 @@
+2021-06-26
+
+https://www.rabbitmq.com/changelog.html
+
+Learning RabbitMQ
+Book: RabbitMQ Essentials 2nd edition, 2021
+
+1장
+
+	publisher -> exchange -> binding -> queue -> channels -> consumer
+
+	E-Trade rabbitmq_server 3.1.1
+
+	Latest version 3.7+
+
+	mq library for each language
+
+		Python: Pika
+		Node.js: amqplib
+		PHP: php-amqplib
+		Java: amqp-client
+		Clojure: Langohr
+
+	direct exchange
+		message routing key
+			bindings routing key
+				queue
+
+	sample
+
+		# 1. Require client library
+		require "bunny"
+
+		# 2. Read RABBITMQ_URI from ENV
+		connection = Bunny.new ENV["'RABBITMQ_URI"]
+
+		# 3. Start a communication session with RabbitMQ
+		connection.start
+		channel = connection.create_channel
+
+		def on_start(channel)
+			# 4. Declare a queue for a given taxi
+			queue = channel.queue("taxi.1", durable: true)
+
+			# 5. Declare a direct exchange, taxi-direct
+			exchange = channel.direct("taxi-direct", durable: true, auto_delete: true)
+
+			# 6. Bind the queue to the exchange
+			queue.bind(exchange, routing_key: "taxi.1")
+
+			# 7. Return the exchange
+			exchange
+		end
+
+		exchange = on_start(channel)
+
+	queue properties
+
+		durable True
+		autoDelete False
+		exclusive False
+		argument Null
+
+	exchange types
+
+		taxi.direct
+		taxi.fanout
+		taxi.topic
+		taxi.headers
+
+	sending the first message
+
+		def order_taxi(taxi, exchange)
+			payload = "example-message"
+			message_id = rand
+			exchange.publish(payload,
+				routing_key: taxi,
+				content_type: "application/json",
+				content_encoding: "UTF-8",
+				persistent: true,
+				message_id: message_id)
+		end
+
+		exchange = on_start(channel)
+		order_taxi("taxi.1", exchange)
+
+	amqp message structure
+
+		properties
+			content-type
+			contennt-encoding
+			delivery-mode
+			priority
+			correlation-id
+			reply-to
+			expiration
+			message-id
+			timestamp
+			type
+			user-id
+			app-id
+			reserved
+			headers
+		body
+
+	consuming messages
+
+		polling-based basic.get
+		push-based basic.consume <== better
+
+		subscribe
+
+	consumer code example
+
+		# example_consumer.rb
+		# 1. Require client library
+		require "bunny"
+
+		# 2. Read RABBITMQ_URI from ENV
+		connection = Bunny.new ENV["RABBITMQ_URI"]
+
+		# 3. Start a communication session with RabbitMQ
+		connection.start
+		channel = connection.create_channel
+
+		# Method for the processing
+		def process_order(info)
+			puts "Handling taxi order"
+			puts info
+			sleep 5.0
+			puts "Processing done"
+		end
+
+		def taxi_subscribe(channel, taxi)
+			# 4. Declare a queue for a given taxi
+			queue = channel.queue(taxi, durable: true)
+
+			# 5. Declare a direct exchange, taxi-direct
+			exchange = channel.direct("taxi-direct", durable: true, auto_delete: true)
+
+			# 6. Bind the queue to the exchange
+			queue.bind(exchange, routing_key: taxi)
+
+			# 7. Subscribe from the queue
+			queue.subscribe(block: true, manual_ack: false) do |delivery_info, properties, payload|
+				process_order(payload)
+			end
+		end
+
+		taxi = "taxi.1"
+		taxi_subscribe(channel, taxi)
+
+	flags
+
+		block - false, true was used in the example, but true is usually not recommended.
+		manual_ack - false
+
+	rabbitmq dashboard
+
+		connections
+			2 lines
+
+		exchanges
+			name: taxi.direct
+			type: direct
+			features:
+				D
+				AD
+
+		queue
+			1 queue per taxi
+
+	troubleshooting error 5001
+
+		message routing key must match
+			RiskEngine					// This comes from the url /xmlsvc/RiskEngine.riskSvc
+
+		console
+			queues
+				name: RiskEngine		// This comes from the annotation in the source code
+
+	adding topic messages
+
+		sending topic message
+
+			def on_start(channel)
+			  # Declare and return the topic exchange, taxi-topic
+			  channel.topic("taxi-topic", durable: true, auto_delete: true)
+			end
+
+			# Publishing an order to the exchange
+			def order_taxi(type, exchange)
+			  payload = "example-message"
+			  message_id = rand
+			  exchange.publish(payload,
+							   routing_key: type,
+							   content_type: "application/json",
+							   content_encoding: "UTF-8",
+							   persistent: true,
+							   message_id: message_id)
+			end
+
+			exchange = on_start(channel)
+			# Order will go to any eco taxi
+			order_taxi('taxi.eco', exchange)
+			# Order will go to any eco taxi
+			order_taxi('taxi.eco', exchange)
+			# Order will go to any taxi
+			order_taxi('taxi', exchange)
+			# Order will go to any taxi
+			order_taxi('taxi', exchange)
+
+		consuming topic message
+
+			# example_consumer.rb
+
+			def taxi_topic_subscribe(channel, taxi, type)
+			  # Declare a queue for a given taxi
+			  queue = channel.queue(taxi, durable: true)
+
+			  # Declare a topic exchange
+			  exchange = channel.topic('taxi-topic', durable: true, auto_delete: true)
+
+			  # Bind the queue to the exchange
+			  queue.bind(exchange, routing_key: type)
+
+			  # Bind the queue to the exchange to make sure the taxi will get any order
+			  queue.bind(exchange, routing_key: 'taxi')
+
+			  # Subscribe from the queue
+			  queue.subscribe(block:true,manual_ack: false) do |delivery_info, properties, payload|
+				process_order(payload)
+			  end
+			end
+
+			taxi = "taxi.3"
+			taxi_topic_subscribe(channel, taxi, "taxi.eco.3")
+
+		this example binds to 2 queue ('taxi.eco.3' and 'taxi')
+
+	channel prefetch
+
+		channel = connection.create_channel
+		channel.prefetch(1)
+
+	between broker and consumer
+
+		auto-ack 메시지가 수신되자마자 브로커에게 자동 컨펌해줌
+
+			queue.subscribe(block: true, manual_ack: true)
+
+		explicit/manual-ack 메시지 수신 후 뭔가 더 해야 할 경우 클라이언트가 일처리를 마친 후 수동 컨펌해줌
+
+			channel.acknowledge(delivery_info.delivery_tag, false)
+
+		클라이언트가 메시지를 queue에서 꺼낸 후 실패할 가능성이 있다 하면 manual-ack를 사용할 것.
+
+3.2
+	publishing to all queue (fanout exchange)
+
+		fanout exchange example
+
+			# 1. Require client library
+			require "bunny"
+
+			# 2. Read RABBITMQ_URI from ENV
+			connection = Bunny.new ENV["RABBITMQ_URI"]
+
+			# 3. Communication session with RabbitMQ
+			connection.start
+			channel = connection.create_channel
+
+			# 4. Declare queues for taxis
+			queue1 = channel.queue("taxi-inbox.1", durable: true)
+
+			queue2 = channel.queue("taxi-inbox.2", durable: true)
+
+			# 5. Declare a fanout exchange
+			exchange = channel.fanout("taxi-fanout")
+
+			# 6. Bind the queue
+			queue1.bind(exchange, routing_key: "")
+			queue2.bind(exchange, routing_key: "")
+
+			# 7. Publish a message
+			exchange.publish("Hello everybody! This is an information message from the crew!", key: "")
+
+			# 8. Close the connection
+			connection.close
+
+	rabbitmq console을 보면
+
+		 exchanges 메뉴에
+
+			name: taxi-fanout
+			type: fanout
+
+		queues를 보면
+
+			taxi-fanout		--+
+			taxi-direct		--+--> This queue
+			taxi-topic		--+
+
+		여러 다른 타입의 exchange가 하나의 queue에 바인딩 되어 있음을 볼 수 있다.
+
+5장
+Tweaking Message Delivery
+
+	https://github.com/PacktPublishing/RabbitMQ-Essentials-Second-Edition/tree/master/Chapter04
+
+	Handling dead letters
+
+		2가지 방법
+
+			Emailing
+			Discarding
+
+		개발자 옵션
+
+			expiration property
+			a message TTL per queue
+			TTL for the queue itself
+
+		배달 못한 메시지에 대해 이메일을 보내기 위해
+
+			dlx (dead letter exchange)가 사용됨.
+			rabbitmq가 그러한 메시지를 dlx로 자동으로 라우팅하는 옵션을 제공.
+			dlx에는 dlq가 바인딩 되어 있다.
+
+		오래된 taxi order 메시지에 dlx를 설정해보자.
+
+			taxi-inbox.1 --+
+			taxi-inbox.2 --+-- fanout-exchange (dlx) --> taxi-dlq --> consumer (emailing)
+			taxi-inbox.3 --+
+
+		이렇게 하면 될까? 아니다.
+
+			# Declare a queue for a taxi inbox 1
+			queue1 = channel.queue('taxi-inbox.1',
+			  durable: true,
+			  arguments:{
+				'x-message-ttl'=> 604800000,
+				'x-dead-letter-exchange'=> 'taxi-dlx',
+				'x-dead-letter-routing-key'=> 'taxi-inbox.1'
+			  }
+			)
+
+		이렇게 해야 한다.
+
+			$ sudo rabbitmqctl set_policy -p cc-dev-vhost Q_TTL_DLX "taxi\.\d+" \
+				'{"message-ttl":604800000, "dead-letter-exchange":"taxi-dlx"}' --apply-to queues
+
+	Undertaking messages
+
+		순서
+			4 queue 생성
+			5 exchagne 생성
+			6 binding
+			7 구독
+
+		sample
+
+			1
+			queue1 = channel.queue('taxi-inbox.1', durable: true,
+			  arguments: {'x-message-ttl'=> 604800000, 'x-dead-letter-exchange'=> 'taxi-dlx'})
+
+			queue2 = channel.queue('taxi-inbox.2', durable: true,
+			  arguments: {'x-message-ttl'=> 604800000, 'x-dead-letter-exchange'=> 'taxi-dlx'})
+
+			2
+			exchange = channel.fanout('taxi-fanout')
+
+			3
+			queue1.bind(exchange, routing_key: "")
+			queue2.bind(exchange, routing_key: "")
+
+			4
+			taxi_dlq = channel.queue('taxi-dlq', durable: true)
+
+			5
+			dlx_exchange = channel.fanout('taxi-dlx')
+
+			6
+			taxi_dlq.bind(dlx_exchange, routing_key: "")
+
+			7
+			exchange.publish("Hello! This is an information message!",   key: "")
+
+		Q_TTL_DLX 설정
+
+			$ sudo rabbitmqctl set_policy \
+				-p cc-dev-vhost Q_TTL_DLX "taxi-inbox\.\d+ " \
+				'{"message-ttl":604800000, "dead-letter-exchange":"taxi-dlx"}' --apply-to queues
+
+			Setting policy "Q_TTL_DLX" for pattern "taxi-inbox\.\d+ " to "{\"message-ttl\":604800000, \"dead-letter-exchange\":\"taxi-dlx\"}" with priority "0" ...
+			...done.
+
+		rabbitmq console 에서 확인해보자면 Q_TTL_DLX가 모든 queue에 적용되어 있다.
+
+			queues
+
+				vhost			name			node	type	features				state
+				cc-dev-vhost	taxi-dlq		..		classic	D						idle
+				cc-dev-vhost	taxi-inbox.1	..		classic	D TTL DLX Q_TTL_DLX		idle
+				cc-dev-vhost	taxi-inbox.2	..		classic	D TTL DLX Q_TTL_DLX		idle
+				cc-dev-vhost	taxi-inbox.3	..		classic	D Args DLX Q_TTL_DLX	idle
+
+			admin 탭에서
+				policies
+					Q_TTL_DLX user policy의 내용을 확인할 수 있다.
+
+	Delayed messages with RabbitMQ
+
+		메세지를 고의로 지연시켜 소비자가 메시지를 즉시 보지는 못하게 한다 (예, 5분 후)
+
+		amqp 자체에는 지연 기능이 없지만 메시지 ttl 기능과 dead-lettering을 이용하여 구현 가능함.
+
+		이하 생략.
+
+	Making delivery mandatory
+
+		백오피스에서 특정 taxi에게 메시지를 보내고 싶은데
+		queue가 있는지 없는지 조차 확인이 불가능한 상태이다.
+		어떻게 이메일 대신 큐 메시지를 보낼 수 있는가?
+
+		REST API를 이용하여 큐가 없는 것이 확인되면 큐를 만들 수 있다.
+		http://localhost:15672/api
+
+	Default exchange
+
+		라우팅할 수 없으면 여기로 보내짐.
+		이게 5001 에러의 정체인 듯.
+
+		이런 특정 동작을 위해 message handler를 등록해야 한다.
+
+		default exchange의 이름은 " " 이다.
+
+		exchanges 탭 아래의 여러 amq.* exchange들은 테스트 및 프로토타이핑 목적으로 사용되는 것이므로 production에서는 사용할 필요가 없습니다.
+
+	백오피스에서 메시지를 특정 taxi에게 보내기
+
+		sample code
+
+			1 연결, 채널 생성
+			require "bunny"
+			connection = Bunny.new ENV["RABBITMQ_URI"]
+
+			connection.start
+			channel = connection.create_channel
+
+			2 교환 생성
+			exchange = channel.default_exchange
+
+			3 리턴 핸들러 생성
+			exchange.on_return do |return_info, properties, content|
+				puts "A returned message!"
+			end
+
+			4 샘플 큐 생성
+			queue = channel.queue("taxi-inbox.100", durable: true)
+
+			5 구독
+			queue.subscribe do |delivery_info, properties, content|
+			  puts "A message is consumed."
+			end
+
+			6 샘플 메시지 송신
+			exchange.publish("A message published to a queue that does exist, it should NOT be returned", :mandatory => true, :routing_key => queue.name)
+
+			7 샘플 메시지 2 송신
+			exchange.publish("A message published to a queue that does not exist, it should be returned", :mandatory => true, :routing_key => "random-key")
+
+			8 연결 종료
+			connection.close
+
+6장
+Message Routing
+
+	taxi client 앱이 web socket을 통해 지속적인 데이터 받기
+	rabbitmq는 다중 프로토콜 메시지 브로커
+	stomp (single text-oriented message protocol)를 이용하여 대화형 웹 앱 구축하여 보자.
+
+	enabling the web stomp plugin
+
+		# 설치
+		rabbitmq-plugins enable rabbitmq_web_stomp
+
+		# 제한된 권한을 가진 사용자 생성
+		$ sudo rabbitmqctl add_vhost cc-dev-ws
+
+		# 권한 부여
+		$ sudo rabbitmqctl set_permissions -p cc-dev-ws cc-dev ".*" ".*" ".*"
+
+	securing web stomp with ssl
+
+		ssl_options.cacertfile = /path/to/tls/ca_certificate.pem
+		ssl_options.certfile = /path/to/tls/server_certificate.pem
+		ssl_options.keyfile = /path/to/tls/server_key.pem
+		ssl_options.verify = verify_peer
+		ssl_options.fail_if_no_peer_cert = true
+		stomp.default_user = guest
+		stomp.default_pass = guest
+		stomp.implicit_connect = true
+
+	creating and publishgin gps data to the queue
+
+		# 큐 생성 taxi_information
+		rabbitmqadmin declare queue name=taxi_information durable=true vhost=cc-dev-ws
+
+		# 교환 생성 taxi_exchange
+		rabbitmqadmin declare exchange name=taxi_exchange type=direct vhost=cc-dev-ws
+
+		CC team이 console 로그인하여 Queues 탭으로 간다.
+
+			Bindngs
+				From: (Default exchange binding) => This queue
+			Add binding to this queue
+				From exchange: text_exchange
+				Routing key: taxi_information
+			Click Bind
+
+	Subscribing to gps and driver info via websockets
+
+		test.html
+
+			<script src=”https://cdn.jsdelivr.net/npm/@stomp/stompjs@5.0.0/bundles/stomp.umd.min.js”></script>
+
+			let stompClient;
+
+			const stompConfig = {
+			  connectHeaders: {
+			   login: username,
+				passcode: password,
+				host: 'cc-dev-ws'
+			  },
+			  brokerURL: brokerURL,
+			  debug: function (str) {
+				console.log('STOMP: ' + str);
+			  },
+			  reconnectDelay: 200,
+			  onConnect: function (frame) {
+				const subscription = stompClient.subscribe('/queue/taxi_information',
+				function (message) {
+				  const body = JSON.parse(message.body);
+				  const latitude = body.latitude;
+				  const longitude = body.longitude;
+				});
+			  }
+			};
+
+			stompClient = new StompJs.Client(stompConfig);
+			stompClient.activate();
+
+	Reply-to queues and RPC
+
+		생략
+
+	Creatring a data analysis service
+
+		생략
+
+Taking RaibbiMQ to Productino
+
+	생략
+
+Best Practices and Broker Monitoring
+
+	메시지 손실 방지
+
+		클러스터에 3개 이상의 노드와 Quorum 큐 유형을 사용하여 분산
+		durable queue, dlivery mode = persistent
+
+		Using a dead letter exchange
+
+			메시지 라우팅 키로 x-dead-letter-routing-key 를 지정
+
+		Handling ack and confirms
+
+			중요한 메시지일 경우, 수신쪽에서 모두 처리한 뒤 confirm 하여 메시지 손실을 방지.
+
+		Message handling
+
+			메시지 크게 제한
+
+				가능한 작은 메시지를 사용
+
+			Prefetching
+	Keeping queues and brokses clean
+
+		TTL 설정 또는 queue 최대 길이 설정
+
+		Auto-deleting unused queues
+
+	Routing best practices
+
+		라우팅을 염두에 두고 시스템 설계
+
+	Networking over connections and channels
+
+		보안
+			AMQPS (AMQP over TLS) 를 사용하거나
+
+			AMQP를 사용하고 VPC 또는 VPN peering 사용하
+
+		Separate queues ove different cores
+
+		sharding
+
+		consistent hash exchange
+
+	Monitoring - REST API
+
+		Node status
+			curl -s http://cc-admin:******@localhost:15672/api/aliveness-test/cc-prod-vhost | grep -c "ok"
+
+		Cluster size
+			curl -s http://cc-admin:******@localhost:15672/api/nodes | grep -o "contexts" | wc -l
+
+		Federation status
+			curl -s http://cc-admin:******@localhost:15672/api/federation-links/cc-prod-vhost | grep -o "running" | wc -l
+
+		Queues' high watermarks
+			curl -s -f http://cc-admin:******@localhost:15672/api/queues/cc-prod-vhost/taxi-dlq | jq '.messages_ready'
+
+		Overall message throughput
+			curl -s http://cc-admin:******@localhost:15672/api/vhosts/cc-prod-vhost | jq '.messages_details.rate'
+
+		File descriptors
+			curl -s http://cc-admin:******@localhost:15672/api/nodes/rabbit@${host} | jq '.fd_used<.fd_total*.8'
+
+		Socket descriptors
+			curl -s http://cc-admin:******@localhost:15672/api/nodes/rabbit@${host} | jq '.sockets_used<.sockets_total*.8'
+
+		Erlang processes
+			curl -s http://cc-admin:******@localhost:15672/api/nodes/rabbit@${host} | jq '.proc_used<.proc_total*.8
+
+		Memory
+			curl -s http://cc-admin:******@localhost:15672/api/nodes/rabbit@${host} | jq '.mem_used<.mem_limit*.8'curl -s
+
+		Disk free size limit
+			http://cc-admin:******@localhost:15672/api/nodes/rabbit@${host} | jq '.disk_free_limit<.disk_free*.8'
