@@ -1,0 +1,13 @@
+docker-rabbitmq.bat
+setup.bat
+
+# 3 workers, 6 messages
+start python worker.py
+start python worker.py
+start python worker.py
+python send.py 1.
+python send.py 5.....
+python send.py 3...
+python send.py 4....
+python send.py 6......
+python send.py 2..
