@@ -1,4 +1,4 @@
-https://www.linkedin.com/learning/learning-rabbitmq/what-s-new-in-this-update?u=61697657
+A summary of https://www.linkedin.com/learning/learning-rabbitmq
 
 0.1
 
@@ -9,8 +9,6 @@ https://www.linkedin.com/learning/learning-rabbitmq/what-s-new-in-this-update?u=
 1.1
 
 1.2 the amqp protocol
-
-
 
 1.7 how to install rabbitmq
 
@@ -151,6 +149,12 @@ durable queue
             }
         }
 
+    요약:
+        create connection
+        create channel
+        create fanout exchange
+        publish message
+
 2.3 consuming messages
 
     EmailService.cs
@@ -197,7 +201,162 @@ durable queue
             }
         }
 
-2.4 filter messages with direct exchange
+    요약
+        create connection
+        create channel
+        create a durable, non-exclusive, non-autodelete queue
+        bind queue with exchange
+        consume
+
+2.4 filter messages with direct exchanges
+
+    다음 예제를 위해 management ui로 webappExchange 삭제.
+
+    BookingController.cs
+
+        using System;
+        using System.Collections.Generic;
+        using System.Linq;
+        using System.Text;
+        using System.Threading.Tasks;
+        using Microsoft.AspNetCore.Http;
+        using Microsoft.AspNetCore.Mvc;
+        using RabbitMQ.Client;
+
+        namespace ExploreCalifornia.WebApp.Controllers
+        {
+            [Route("api/[controller]")]
+            [ApiController]
+            public class BookingController : ControllerBase
+            {
+                [HttpPost]
+                [Route("Book")]
+                public IActionResult Book()
+                {
+                    var tourname = Request.Form["tourname"];
+                    var name = Request.Form["name"];
+                    var email= Request.Form["email"];
+                    var needsTransport = Request.Form["transport"] == "on";
+
+                    // booking queue
+    +               var message = $"{tourname};{name};{email}";
+    +               SendMessage("tour.booked", message);
+
+                    return Redirect($"/BookingConfirmed?tourname={tourname}&name={name}&email={email}");
+                }
+
+                [HttpPost]
+                [Route("Cancel")]
+                public IActionResult Cancel()
+                {
+                    var tourname = Request.Form["tourname"];
+                    var name = Request.Form["name"];
+                    var email = Request.Form["email"];
+                    var cancelReason = Request.Form["reason"];
+
+                    // cancellation queue
+    +               var message = $"{tourname};{name};{email};{cancelReason}";
+    +               SendMessage("tour.canceled", message);
+
+                    return Redirect($"/BookingCanceled?tourname={tourname}&name={name}");
+                }
+
+    +           private void SendMessage(string routingKey, string message)
+    +           {
+    +               var factory = new ConnectionFactory();
+    +               factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+    +               var connection = factory.CreateConnection();
+    +               var channel = connection.CreateModel();
+
+    +               var bytes = Encoding.UTF8.GetBytes(message);
+    +               channel.BasicPublish("webappExchange", routingKey, null, bytes);
+
+    +               channel.Close();
+    +               connection.Close();
+    +           }
+            }
+        }
+
+    위 코드가 실행되기 전에 main 함수에서 direct exchange를 먼저 생성하도록 한다.
+
+    Program.cs
+
+        using System;
+        using System.Collections.Generic;
+        using System.IO;
+        using System.Linq;
+        using System.Threading.Tasks;
+        using Microsoft.AspNetCore;
+        using Microsoft.AspNetCore.Hosting;
+        using Microsoft.Extensions.Configuration;
+        using Microsoft.Extensions.Logging;
+    +   using RabbitMQ.Client;
+
+        namespace ExploreCalifornia.WebApp
+        {
+            public class Program
+            {
+                public static void Main(string[] args)
+                {
+    +               var factory = new ConnectionFactory();
+    +               factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+    +               var connection = factory.CreateConnection();
+    +               var channel = connection.CreateModel();
+
+                    // direct, durable.
+    +               channel.ExchangeDeclare("webappExchange", ExchangeType.Direct, true);
+
+    +               channel.Close();
+    +               connection.Close();
+
+                    CreateWebHostBuilder(args).Build().Run();
+                }
+
+                public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
+                    WebHost.CreateDefaultBuilder(args)
+                        .UseStartup<Startup>();
+            }
+        }
+
+    메시지 consumer
+
+        using System;
+        using System.Text;
+        using RabbitMQ.Client;
+        using RabbitMQ.Client.Events;
+
+        namespace ExploreCalifornia.EmailService
+        {
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    var factory = new ConnectionFactory();
+                    factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+                    var connection = factory.CreateConnection();
+                    var channel = connection.CreateModel();
+
+                    channel.QueueDeclare("emailServiceQueue", true, false, false);
+    +               channel.QueueBind("emailServiceQueue", "webappExchange", "tour.booked");
+
+                    var consumer = new EventingBasicConsumer(channel);
+                    consumer.Received += (sender, eventArgs) =>
+                    {
+                        var msg = Encoding.UTF8.GetString(eventArgs.Body);
+    +                   Console.WriteLine($"{eventArgs.RoutingKey}: {msg}");
+                    };
+
+                    channel.BasicConsume("emailServiceQueue", true, consumer);
+
+                    Console.ReadLine();
+
+                    channel.Close();
+                    connection.Close();
+                }
+            }
+        }
+
+    tour.book에 도착한 메시지는 읽었지만, tour.cancelled 에 도착한 메시지는 읽지 않는다.
 
 2.5 filter messages with topic exchanges
 
