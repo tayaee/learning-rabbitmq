@@ -996,6 +996,130 @@ durable queue
 
 3.4 working with dead letter exchanges
 
+    conditions for DL
+
+        rejection
+        negative ack
+        expired by ttl
+        queue length limit exceeded
+
+    what happens to DL messages
+
+        sent to specific dlx
+        extra headers for investigation
+            x-death 가 추가된다.
+                queue
+                reason
+                time
+                exhcnage
+                routing-keys
+            x-first-death-reason
+            x-first-death-queue
+            x-first-death-exchange
+
+    받는 쪽에서 DL을 어떻게 처리할 지 명시.
+
+        using System;
+        using System.Collections.Generic;
+        using System.ComponentModel.DataAnnotations;
+        using System.Text;
+        using RabbitMQ.Client;
+        using RabbitMQ.Client.Events;
+
+        namespace ExploreCalifornia.BackOffice
+        {
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    var factory = new ConnectionFactory();
+                    factory.Uri = new Uri("amqp://backoffice:backoffice123@localhost:5672");
+                    var connection = factory.CreateConnection();
+                    var channel = connection.CreateModel();
+
+    +               var arguments = new Dictionary<string, object>
+    +               {
+    +                   {"x-dead-letter-exchange", "DLX"}
+    +               };
+
+    +               channel.QueueDeclare("backOfficeQueue", true, false, false, arguments);
+
+                    var headers = new Dictionary<string, object>
+                    {
+                        {"subject", "tour"},
+                        {"action", "booked"},
+                        {"x-match", "any"}
+                    };
+                    channel.QueueBind("backOfficeQueue", "webappExchange", "", headers);
+
+                    var consumer = new EventingBasicConsumer(channel);
+                    consumer.Received += (sender, eventArgs) =>
+                    {
+                        var msg = Encoding.UTF8.GetString(eventArgs.Body);
+                        var subject = Encoding.UTF8.GetString(eventArgs.BasicProperties.Headers["subject"] as byte[]);
+                        var action = Encoding.UTF8.GetString(eventArgs.BasicProperties.Headers["action"] as byte[]);
+                        var userId = eventArgs.BasicProperties.UserId;
+
+                        Console.WriteLine($"{userId} -> {subject}.{action}: {msg}");
+
+                        // 모든 메시지를 reject 해서, DLX (exchange)로 보냄.
+    +                   channel.BasicReject(eventArgs.DeliveryTag, false);
+                    };
+
+    +               channel.BasicConsume("backOfficeQueue", false, consumer);
+
+                    Console.ReadLine();
+
+                    channel.Close();
+                    connection.Close();
+                }
+            }
+        }
+
+    DL을 처리하는 프로그램
+
+        using System;
+        using System.Collections.Generic;
+        using System.Text;
+        using RabbitMQ.Client;
+        using RabbitMQ.Client.Events;
+
+        namespace ExploreCalifornia.DeadLetters
+        {
+            class Program
+            {
+                static void Main(string[] args)
+                {
+    +               var factory = new ConnectionFactory();
+    +               factory.Uri = new Uri("amqp://backoffice:backoffice123@localhost:5672");
+    +               var connection = factory.CreateConnection();
+    +               var channel = connection.CreateModel();
+
+    +               channel.ExchangeDeclare("DLX", ExchangeType.Direct, true, false);
+    +               channel.QueueDeclare("deadLetters", true, false, false);
+    +               channel.QueueBind("deadLetters", "DLX", "");
+
+                    var consumer = new EventingBasicConsumer(channel);
+    +               consumer.Received += (sender, eventArgs) =>
+    +               {
+    +                   var message = Encoding.UTF8.GetString(eventArgs.Body);
+    +                   var deathReasonBytes = eventArgs.BasicProperties.Headers["x-first-death-reason"] as byte[];
+    +                   var deathReason = Encoding.UTF8.GetString(deathReasonBytes);
+    +                   Console.WriteLine($"Deadletter: {message}. Reason: {deathReason}");
+    +               };
+
+    +               channel.BasicConsume("deadLetters", true, consumer);
+
+                    Console.ReadLine();
+
+    +               channel.Close();
+    +               connection.Close();
+                }
+            }
+        }
+
+    ㅡ흣
+
 3.5 tracing message contents for troubleshooting
 
 3.6 challenge: show chat users
