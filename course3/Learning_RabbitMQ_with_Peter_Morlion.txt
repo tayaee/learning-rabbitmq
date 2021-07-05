@@ -86,7 +86,7 @@ durable queue
 
     // fanout exchnage에 메시지 보내기.
 
-    BookingController.cs
+    ExploreCalifornia.WebApp.Controllers/BookingController.cs
 
         using System;
         using System.Collections.Generic;
@@ -157,7 +157,7 @@ durable queue
 
 2.3 consuming messages
 
-    EmailService.cs
+    ExploreCalifornia.EmailService/Program.cs
 
         using System;
     +   using System.Text;
@@ -212,7 +212,7 @@ durable queue
 
     다음 예제를 위해 management ui로 webappExchange 삭제.
 
-    BookingController.cs
+    ExploreCalifornia.WebApp.Controllers/BookingController.cs
 
         using System;
         using System.Collections.Generic;
@@ -279,7 +279,7 @@ durable queue
 
     위 코드가 실행되기 전에 main 함수에서 direct exchange를 먼저 생성하도록 한다.
 
-    Program.cs
+    ExploreCalifornia.WebApp/Program.cs
 
         using System;
         using System.Collections.Generic;
@@ -318,7 +318,7 @@ durable queue
             }
         }
 
-    메시지 consumer
+    ExploreCalifornia.EmailService/Program.cs
 
         using System;
         using System.Text;
@@ -360,98 +360,100 @@ durable queue
 
 2.5 filter messages with topic exchanges
 
-	use case
-		book -> email
-		cancel -> email, backoffice
+    use case
+        book -> email
+        cancel -> email, backoffice
 
-	routing key design for topic exchange
-		tour.booked
-		tour.cancelled
+    routing key design for topic exchange
+        tour.booked
+        tour.cancelled
 
-	binding key design
-		queue for email: tour.booked
-		queue for backoffice: tour.*	// * 는 임의의 단어 하나, # 는 임의의 단어 여러 개
+    binding key design
+        queue for email: tour.booked
+        queue for backoffice: tour.*    // * 는 임의의 단어 하나, # 는 임의의 단어 여러 개
 
-	위 코드에서 EmailService binding key는 이미 tour.booked 이므로 변경할 것이 없다.
+    위 코드에서 EmailService binding key는 이미 tour.booked 이므로 변경할 것이 없다.
 
-	WebApp/Program.cs
+    ExploreCalifornia.WebApp/Program.cs
 
-		using System;
-		using System.Collections.Generic;
-		using System.IO;
-		using System.Linq;
-		using System.Threading.Tasks;
-		using Microsoft.AspNetCore;
-		using Microsoft.AspNetCore.Hosting;
-		using Microsoft.Extensions.Configuration;
-		using Microsoft.Extensions.Logging;
-		using RabbitMQ.Client;
+        using System;
+        using System.Collections.Generic;
+        using System.IO;
+        using System.Linq;
+        using System.Threading.Tasks;
+        using Microsoft.AspNetCore;
+        using Microsoft.AspNetCore.Hosting;
+        using Microsoft.Extensions.Configuration;
+        using Microsoft.Extensions.Logging;
+        using RabbitMQ.Client;
 
-		namespace ExploreCalifornia.WebApp
-		{
-			public class Program
-			{
-				public static void Main(string[] args)
-				{
-					var factory = new ConnectionFactory();
-					factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
-					var connection = factory.CreateConnection();
-					var channel = connection.CreateModel();
+        namespace ExploreCalifornia.WebApp
+        {
+            public class Program
+            {
+                public static void Main(string[] args)
+                {
+                    var factory = new ConnectionFactory();
+                    factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+                    var connection = factory.CreateConnection();
+                    var channel = connection.CreateModel();
 
-					// exchange 타입을 Topic으로 바꾸고
-	+				channel.ExchangeDeclare("webappExchange", ExchangeType.Topic, true);
+                    // exchange 타입을 Topic으로 바꾸고
+    +               channel.ExchangeDeclare("webappExchange", ExchangeType.Topic, true);
 
-					channel.Close();
-					connection.Close();
+                    channel.Close();
+                    connection.Close();
 
-					CreateWebHostBuilder(args).Build().Run();
-				}
+                    CreateWebHostBuilder(args).Build().Run();
+                }
 
-				public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
-					WebHost.CreateDefaultBuilder(args)
-						.UseStartup<Startup>();
-			}
-		}
+                public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
+                    WebHost.CreateDefaultBuilder(args)
+                        .UseStartup<Startup>();
+            }
+        }
 
-	BackOffice/Program.cs
+    // "webappExchange" (type: topic) - [binding key: "tour.*"] -> "backOfficeQueue"
 
-		using System;
-		using System.ComponentModel.DataAnnotations;
-		using System.Text;
-		using RabbitMQ.Client;
-		using RabbitMQ.Client.Events;
+    ExploreCalifornia.BackOffice/Program.cs
 
-		namespace ExploreCalifornia.BackOffice
-		{
-			class Program
-			{
-				static void Main(string[] args)
-				{
-	+				var factory = new ConnectionFactory();
-	+				factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
-	+				var connection = factory.CreateConnection();
-	+				var channel = connection.CreateModel();
+        using System;
+        using System.ComponentModel.DataAnnotations;
+        using System.Text;
+        using RabbitMQ.Client;
+        using RabbitMQ.Client.Events;
 
-	+				channel.QueueDeclare("backOfficeQueue", true, false, false);
-					// tour.* 를 바인딩 키로 하여 booked, cancelled, 두 가지 메시지를 모두 수신한다.
-	+				channel.QueueBind("backOfficeQueue", "webappExchange", "tour.*");
+        namespace ExploreCalifornia.BackOffice
+        {
+            class Program
+            {
+                static void Main(string[] args)
+                {
+    +               var factory = new ConnectionFactory();
+    +               factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+    +               var connection = factory.CreateConnection();
+    +               var channel = connection.CreateModel();
 
-	+				var consumer = new EventingBasicConsumer(channel);
-	+				consumer.Received += (sender, eventArgs) =>
-	+				{
-	+					var msg = Encoding.UTF8.GetString(eventArgs.Body);
-	+					Console.WriteLine($"{eventArgs.RoutingKey}: {msg}");
-	+				};
+    +               channel.QueueDeclare("backOfficeQueue", true, false, false);
+                    // tour.* 를 바인딩 키로 하여 booked, cancelled, 두 가지 메시지를 모두 수신한다.
+    +               channel.QueueBind("backOfficeQueue", "webappExchange", "tour.*");
 
-	+				channel.BasicConsume("backOfficeQueue", true, consumer);
+    +               var consumer = new EventingBasicConsumer(channel);
+    +               consumer.Received += (sender, eventArgs) =>
+    +               {
+    +                   var msg = Encoding.UTF8.GetString(eventArgs.Body);
+    +                   Console.WriteLine($"{eventArgs.RoutingKey}: {msg}");
+    +               };
 
-	+				Console.ReadLine();
+    +               channel.BasicConsume("backOfficeQueue", true, consumer);
 
-	+				channel.Close();
-	+				connection.Close();
-				}
-			}
-		}
+    +               Console.ReadLine();
+
+    +               channel.Close();
+    +               connection.Close();
+                }
+            }
+        }
 
 2.6 filter messages with headers
 
