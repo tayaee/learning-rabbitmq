@@ -176,9 +176,9 @@ durable queue
     +               var channel = connection.CreateModel();
 
                     // emailServiceQueue: queue name
-                    // true: durable, MQ restart시 queue를 재생성.
-                    // false: exclusive, false이므로 여러 connection이 queue에 접속할 수 있음. 메시지는 round robin으로 전달.
-                    // false: autoDelete: false이므로 disconnect 해도 queue 삭제 안 됨.
+                    // durable = true: MQ restart시 queue를 재생성.
+                    // exclusive = false: false이므로 여러 connection이 queue에 접속할 수 있음. 메시지는 round robin으로 전달.
+                    // autoDelete = false: false이므로 disconnect 해도 queue 삭제 안 됨.
     +               channel.QueueDeclare("emailServiceQueue", true, false, false);
 
                     // fanout 사용중이므로 마지말 파라미터 binding key는 사용하지 않는다.
@@ -541,7 +541,7 @@ durable queue
 
     +               SendMessage(headers, message);
 
-					// 고객이 교통편이 필요한 경우.
+                    // 고객이 교통편이 필요한 경우.
     +               if (needsTransport)
     +               {
     +                   var needsTransportHeaders = new Dictionary<string, object>
@@ -698,6 +698,89 @@ durable queue
 2.7 challenge: a simple chat appliction
 
 2.8 solution: a simple chat appliction
+
+    mgmt ui에서 사용자 추가, 퍼미션 추가.
+
+        chat / chat
+
+    RabbitMQChat/Program.cs
+
+        using RabbitMQ.Client;
+        using RabbitMQ.Client.Events;
+        using System;
+        using System.Text;
+        using System.Threading.Tasks;
+
+        namespace RabbitMQChat
+        {
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    var exchangeName = "chat";
+
+                    // Create unique queue name for this instance
+    +               var queueName = Guid.NewGuid().ToString();
+
+                    // Connect to RabbitMQ
+                    var factory = new ConnectionFactory();
+                    factory.Uri = new Uri("amqp://chat:chat@localhost:5672");
+    +               var connection = factory.CreateConnection();
+    +               var channel = connection.CreateModel();
+
+                    // Declare exchange and queue
+    +               channel.ExchangeDeclare(exchangeName, ExchangeType.Fanout);
+
+                    // durable = true: MQ restart 시 queue를 재생성.
+                    // exclusive = true: 즉 이건 각 클라이언트 전용 queue임. 남과 공유하지 않음.
+                    // autoDelete = true: 클라이언트가 사라지면 queue 삭제.
+    +               channel.QueueDeclare(queueName, true, true, true);
+
+					// fanout exchange이므로 마지막 binding key는 사용하지 않는다 -> ""
+    +               channel.QueueBind(queueName, exchangeName, "");
+
+                    // Subscribe to incoming messages
+    +               var consumer = new EventingBasicConsumer(channel);
+    +               consumer.Received += (sender, eventArgs) =>
+                    {
+    +                   var text = Encoding.UTF8.GetString(eventArgs.Body.ToArray());
+    +                   Console.WriteLine(text);
+                    };
+
+					// autoAck = true
+    +               channel.BasicConsume(queueName, true, consumer);
+
+                    // Read input
+    +               var input = Console.ReadLine();
+    +               while (input != "")
+                    {
+                        // Remove line we just typed or we would see it twice
+                        Console.SetCursorPosition(0, Console.CursorTop - 1);
+                        ClearCurrentConsoleLine();
+
+                        // Send outgoing message
+                        var bytes = Encoding.UTF8.GetBytes(input);
+
+						// routingKey = ""
+						// properties = null
+    +                   channel.BasicPublish(exchangeName, "", null, bytes);
+    +                   input = Console.ReadLine();
+                    }
+
+                    // Disconnect
+    +               channel.Close();
+    +               connection.Close();
+                }
+
+                public static void ClearCurrentConsoleLine()
+                {
+                    int currentLineCursor = Console.CursorTop;
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    Console.Write(new string(' ', Console.WindowWidth));
+                    Console.SetCursorPosition(0, currentLineCursor);
+                }
+            }
+        }
 
 2.9 challenge: chatrooms
 
