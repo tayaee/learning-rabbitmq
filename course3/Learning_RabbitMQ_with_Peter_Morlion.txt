@@ -909,6 +909,18 @@ durable queue
 
 3.2 authorize or block application actions
 
+    https://www.rabbitmq.com/access-control.html
+
+    Admin tab
+        User details
+            Permissions
+                Current permissions
+                    Virtual host    Configure regexp    Write regexp    Read regexp
+                    /               .*                  .*              .*
+
+            Topic permissions
+                // routing key에 대한 regex 표현식을 지정함.
+
 3.3 validate user ids
 
 3.4 working with dead letter exchanges
