@@ -15,23 +15,32 @@ A summary of https://www.linkedin.com/learning/learning-rabbitmq
     linux
 
     windows
-        otp_win64_22.1.exe from http://erlang.org
+        otp_win64_22.1.exe from https://www.rabbitmq.com/which-erlang.html
+
             install as run as administrator
 
-        rabbitmq-server-3.8.0.exe from rabbitmq.com
-            install wit default  option (no need to run as administrator)
+            set ERLANG_HOME=C:\Program Files\erl-24.0       // upgraded to 24
+
+        rabbitmq-server-3.8.0.exe from https://www.rabbitmq.com/changelog.html
+
+            install with default  option (no need to run as administrator)
+
+        enable management console
+
+            Run Command Prompt with %ERLANG_HOME%
+            cd c:\Program Files\RabbitMQ Server\rabbitmq_server-3.8.0\sbin> rabbitmq-plugins enable rabbitmq_management
+
+        install service
+            Start > RabbitMQ (re)install
 
         start
             net start rabbitmq
 
+        check status
+            the console service is ready at http://localhost:15672 (guest / guest)
+
         stop
             net stop rabbitmq
-
-        management console
-
-            cd c:\Program Files\RabbitMQ Server\rabbitmq_server-3.8.0\sbin> rabbitmq-plugins enable rabbitmq_management
-
-            the console service is ready at http://localhost:15672
 
     mac
 
@@ -865,3 +874,49 @@ durable queue
         }
 
 2.11 quiz
+
+3 advanced usage
+
+3.1 set up and use authentication
+
+    2 methods
+
+        username / password
+        x509 certificate
+
+    auth backends
+
+        rabbitmq
+        ldap
+        http server
+
+    best practices
+
+        create a user per application
+
+            use mgmt ui (http://localhost:15672, guest / guest)
+
+                mgmt ui
+                    Admin tab
+                        Add a user
+                            webapp / webapp123
+                        User details
+                            click Set permission
+
+        add an admin user
+
+        remove guest:guest
+
+3.2 authorize or block application actions
+
+3.3 validate user ids
+
+3.4 working with dead letter exchanges
+
+3.5 tracing message contents for troubleshooting
+
+3.6 challenge: show chat users
+
+3.7 solution: show chat users
+
+3.8 quiz
