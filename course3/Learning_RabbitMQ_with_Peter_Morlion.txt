@@ -14,68 +14,201 @@ https://www.linkedin.com/learning/learning-rabbitmq/what-s-new-in-this-update?u=
 
 1.7 how to install rabbitmq
 
-	linux
+    linux
 
-	windows
-		otp_win64_22.1.exe from http://erlang.org
-			install as run as administrator
+    windows
+        otp_win64_22.1.exe from http://erlang.org
+            install as run as administrator
 
-		rabbitmq-server-3.8.0.exe from rabbitmq.com
-			install wit default  option (no need to run as administrator)
+        rabbitmq-server-3.8.0.exe from rabbitmq.com
+            install wit default  option (no need to run as administrator)
 
-		start
-			net start rabbitmq
+        start
+            net start rabbitmq
 
-		stop
-			net stop rabbitmq
+        stop
+            net stop rabbitmq
 
-		management console
+        management console
 
-			cd c:\Program Files\RabbitMQ Server\rabbitmq_server-3.8.0\sbin> rabbitmq-plugins enable rabbitmq_management
+            cd c:\Program Files\RabbitMQ Server\rabbitmq_server-3.8.0\sbin> rabbitmq-plugins enable rabbitmq_management
 
-			the console service is ready at http://localhost:15672
+            the console service is ready at http://localhost:15672
 
-	mac
+    mac
 
-	cloud
+    cloud
 
-		amazon
+        amazon
 
-		azure
+        azure
 
-		cloud foundary
+        cloud foundary
 
-		gcp
+        gcp
 
-		cloudamqp
+        cloudamqp
 
-			go to https://cloudamqp.com
+            go to https://cloudamqp.com
 
-			sign up
+            sign up
 
-			Create a test instance using free plan: Littel Lemur (Free)
+            Create a test instance using free plan: Littel Lemur (Free)
 
-			https://customer.cloudamqp.com/instance/#
+            https://customer.cloudamqp.com/instance/#
 
-				Click RabbitMQ Manager
+                Click RabbitMQ Manager
 
-				RabbitMQ 3.8.5, Erlang 22.3.4.12
+                RabbitMQ 3.8.5, Erlang 22.3.4.12
 
-			https://api.cloudamqp.com/console/e00e2262-3108-49d6-a249-<removed>/details
+            https://api.cloudamqp.com/console/e00e2262-3108-49d6-a249-<removed>/details
 
-				amqp url: amqps://wpnhglcx:HpBkG6LqUztKMk4zpDFoJBvO<removed>@hornet.rmq.cloudamqp.com/wpnhglcx
+                amqp url: amqps://wpnhglcx:HpBkG6LqUztKMk4zpDFoJBvO<removed>@hornet.rmq.cloudamqp.com/wpnhglcx
 
-	docker
+    docker
 
-	kubrenetes
+    kubrenetes
 
-	chef
+    chef
 
-	puppet
+    puppet
 
 1.8 quiz
 
 durable queue
 
-	mq Àç½ÃÀÛ ¶§ queue°¡ ´Ù½Ã ¸¸µé¾îÁü.
-	±× ¾È¿¡ ÀÖ´ø ¸Þ½ÃÁö°¡ ³²¾Æ ÀÖ´Ù´Â ¶æÀÌ ¾Æ´Ô. message´Â ±âº»ÀûÀ¸·Î »ç¶óÁö°í, ±×°Å ³²¾Æ ÀÖ°Ô ÇÏ·Á¸é messageµµ persistentÇØ¾ß ÇÔ.
+    mq ìž¬ì‹œìž‘ ë•Œ queueê°€ ë‹¤ì‹œ ë§Œë“¤ì–´ì§.
+    ê·¸ ì•ˆì— ìžˆë˜ ë©”ì‹œì§€ê°€ ë‚¨ì•„ ìžˆë‹¤ëŠ” ëœ»ì´ ì•„ë‹˜. messageëŠ” ê¸°ë³¸ì ìœ¼ë¡œ ì‚¬ë¼ì§€ê³ , ê·¸ê±° ë‚¨ì•„ ìžˆê²Œ í•˜ë ¤ë©´ messageë„ persistentí•´ì•¼ í•¨.
+
+2 basic usage
+
+2.1 intro
+
+2.2 publish to a rabbitmq exchange
+
+    // fanout exchnageì— ë©”ì‹œì§€ ë³´ë‚´ê¸°.
+
+    BookingController.cs
+
+        using System;
+        using System.Collections.Generic;
+        using System.Linq;
+    +   using System.Text;
+        using System.Threading.Tasks;
+        using Microsoft.AspNetCore.Http;
+        using Microsoft.AspNetCore.Mvc;
+    +   using RabbitMQ.Client;
+
+        namespace ExploreCalifornia.WebApp.Controllers
+        {
+            [Route("api/[controller]")]
+            [ApiController]
+            public class BookingController : ControllerBase
+            {
+                [HttpPost]
+                [Route("Book")]
+                public IActionResult Book()
+                {
+                    var tourname = Request.Form["tourname"];
+                    var name = Request.Form["name"];
+                    var email= Request.Form["email"];
+                    var needsTransport = Request.Form["transport"] == "on";
+
+    +               var factory = new ConnectionFactory();
+    +               factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+    +               var connection = factory.CreateConnection();
+    +               var channel = connection.CreateModel();
+
+                    // 3rd parammeter: true = durable exchange
+    +               channel.ExchangeDeclare("webappExchange", ExchangeType.Fanout, true);
+
+    +               var message = $"{tourname};{name};{email}";
+                    // convert to byte as amqp is a binary protocol.
+    +               var bytes = Encoding.UTF8.GetBytes(message);
+                    // 2nd: "" = routing key
+                    // 3rd: null = no properties
+    +               channel.BasicPublish("webappExchange", "", null, bytes);
+
+    +               channel.Close();
+    +               connection.Close();
+
+                    return Redirect($"/BookingConfirmed?tourname={tourname}&name={name}&email={email}");
+                }
+
+                [HttpPost]
+                [Route("Cancel")]
+                public IActionResult Cancel()
+                {
+                    var tourname = Request.Form["tourname"];
+                    var name = Request.Form["name"];
+                    var email = Request.Form["email"];
+                    var cancelReason = Request.Form["reason"];
+
+                    // Send cancel message here
+
+                    return Redirect($"/BookingCanceled?tourname={tourname}&name={name}");
+                }
+            }
+        }
+
+2.3 consuming messages
+
+    EmailService.cs
+
+        using System;
+    +   using System.Text;
+    +   using RabbitMQ.Client;
+    +   using RabbitMQ.Client.Events;
+
+        namespace ExploreCalifornia.EmailService
+        {
+            class Program
+            {
+                static void Main(string[] args)
+                {
+    +               var factory = new ConnectionFactory();
+    +               factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+    +               var connection = factory.CreateConnection();
+    +               var channel = connection.CreateModel();
+
+                    // emailServiceQueue: queue name
+                    // true: durable, MQ restartì‹œ queueë¥¼ ìž¬ìƒì„±.
+                    // false: exclusive, falseì´ë¯€ë¡œ ì—¬ëŸ¬ connectionì´ queueì— ì ‘ì†í•  ìˆ˜ ìžˆìŒ. ë©”ì‹œì§€ëŠ” round robinìœ¼ë¡œ ì „ë‹¬.
+                    // false: autoDelete: falseì´ë¯€ë¡œ disconnect í•´ë„ queue ì‚­ì œ ì•ˆ ë¨.
+    +               channel.QueueDeclare("emailServiceQueue", true, false, false);
+
+                    // fanout ì‚¬ìš©ì¤‘ì´ë¯€ë¡œ ë§ˆì§€ë§ íŒŒë¼ë¯¸í„° binding keyëŠ” ì‚¬ìš©í•˜ì§€ ì•ŠëŠ”ë‹¤.
+    +               channel.QueueBind("emailServiceQueue", "webappExchange", "");
+
+    +               var consumer = new EventingBasicConsumer(channel);
+    +               consumer.Received += (sender, eventArgs) =>
+    +               {
+    +                   var msg = Encoding.UTF8.GetString(eventArgs.Body);
+    +                   Console.WriteLine(msg);
+    +               };
+
+    +               channel.BasicConsume("emailServiceQueue", true, consumer);
+
+    +               Console.ReadLine();
+
+    +               channel.Close();
+    +               connection.Close();
+                }
+            }
+        }
+
+2.4 filter messages with direct exchange
+
+2.5 filter messages with topic exchanges
+
+2.6 filter messages with headers
+
+2.7 challenge: a simple chat appliction
+
+2.8 solution
+
+2.9 challenge: chatrooms
+
+2.10 solution
+
+2.11 quiz
