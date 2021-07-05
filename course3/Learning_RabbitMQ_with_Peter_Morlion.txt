@@ -1,0 +1,67 @@
+https://www.linkedin.com/learning/learning-rabbitmq/what-s-new-in-this-update?u=61697657
+
+0.1
+
+0.2
+
+1
+
+1.7 how to install rabbitmq
+
+	linux
+
+	windows
+		otp_win64_22.1.exe from http://erlang.org
+			install as run as administrator
+
+		rabbitmq-server-3.8.0.exe from rabbitmq.com
+			install wit default  option (no need to run as administrator)
+
+		start
+			net start rabbitmq
+
+		stop
+			net stop rabbitmq
+
+		plugins
+			cd c:\Program Files\RabbitMQ Server\rabbitmq_server-3.8.0\sbin> rabbitmq-plugins enable rabbitmq_management
+
+		the console service is ready at http://localhost:15672
+
+	mac
+
+	cloud
+
+		amazon
+
+		azure
+
+		cloud foundary
+
+		gcp
+
+		cloudamqp
+
+			go to cloudamqp.com
+
+			sign up
+
+			Create a test instance using free plan: Littel Lemur (Free)
+
+			https://customer.cloudamqp.com/instance/#
+
+				Click RabbitMQ Manager
+
+				RabbitMQ 3.8.5, Erlang 22.3.4.12
+
+			https://api.cloudamqp.com/console/e00e2262-3108-49d6-a249-<removed>/details
+
+				amqp url: amqps://wpnhglcx:HpBkG6LqUztKMk4zpDFoJBvO<removed>@hornet.rmq.cloudamqp.com/wpnhglcx
+
+	docker
+
+	kubrenetes
+
+	chef
+
+	puppet
