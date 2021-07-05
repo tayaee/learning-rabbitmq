@@ -923,6 +923,77 @@ durable queue
 
 3.3 validate user ids
 
+    누가 보낸 메시지인지 어떻게 알 수 있는가.
+
+    Publisher:
+
+        private void SendMessage(IDictionary<string, object> headers, string message)
+        {
+            var factory = new ConnectionFactory();
+    +       factory.Uri = new Uri("amqp://webapp:password@localhost:5672");
+            var connection = factory.CreateConnection();
+            var channel = connection.CreateModel();
+
+            var bytes = Encoding.UTF8.GetBytes(message);
+            var props = new BasicProperties();
+            props.Headers = headers;
+    +       props.UserId = "webapp";        // 이것을 설정하면, amqp url의 userid와 반드시 매치해야 메시지 전달됨.
+            channel.BasicPublish("webappExchange", "", props, bytes);
+
+            channel.Close();
+            connection.Close();
+        }
+
+    Consumer:
+
+        using System;
+        using System.Collections.Generic;
+        using System.Text;
+        using RabbitMQ.Client;
+        using RabbitMQ.Client.Events;
+
+        namespace ExploreCalifornia.EmailService
+        {
+            class Program
+            {
+                static void Main(string[] args)
+                {
+                    var factory = new ConnectionFactory();
+                    factory.Uri = new Uri("amqp://guest:guest@localhost:5672");
+                    var connection = factory.CreateConnection();
+                    var channel = connection.CreateModel();
+
+                    channel.QueueDeclare("emailServiceQueue", true, false, false);
+
+                    // x-match: all 이면, subject: tour AND action: booked 일 때 메시지를 queue로 전달
+                    var headers = new Dictionary<string, object>
+                    {
+                        {"subject", "tour"},
+                        {"action", "booked"},
+                        {"x-match", "all"}
+                    };
+                    channel.QueueBind("emailServiceQueue", "webappExchange", "", headers);
+
+                    var consumer = new EventingBasicConsumer(channel);
+                    consumer.Received += (sender, eventArgs) =>
+                    {
+                        var msg = Encoding.UTF8.GetString(eventArgs.Body);
+                        var subject = Encoding.UTF8.GetString(eventArgs.BasicProperties.Headers["subject"] as byte[]);
+                        var action = Encoding.UTF8.GetString(eventArgs.BasicProperties.Headers["action"] as byte[]);
+
+    +                   Console.WriteLine($"{eventArgs.BasicProperties.UserId} -> {subject}.{action}: {msg}");
+                    };
+
+                    channel.BasicConsume("emailServiceQueue", true, consumer);
+
+                    Console.ReadLine();
+
+                    channel.Close();
+                    connection.Close();
+                }
+            }
+        }
+
 3.4 working with dead letter exchanges
 
 3.5 tracing message contents for troubleshooting
