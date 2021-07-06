@@ -1118,9 +1118,44 @@ durable queue
             }
         }
 
-    ㅡ흣
-
 3.5 tracing message contents for troubleshooting
+
+    tracing
+
+        performance impact
+        amq.rabbitmq.trace (이건 tracing에 사용되는 exchange임)
+        rabbitmq_tracing plugin
+
+    How to
+        Enable tracing
+
+            Start
+                RabbitMQ Command Prompt (sbin)
+                    rabbitmq-plugins enable rabbitmq_tracing
+                    rabbitmqctl trace_on
+                    net stop rabbitmq
+                    net start rabbitmq
+
+        Adding a new trace
+            mgmt ui
+                Admin tab
+                    Tracing (새로 생기는 메뉴)
+                        All traces
+                            Add a new trace
+                                name: test-trace
+                                Tracer connection username: guest       // #1
+                                Pattern: #
+                                Click Add trace
+
+        메시지를 보내 본다
+
+        View trace log
+            mgmt ui
+                Admin tab
+                    Tracing
+                        All Traces
+                            Trace log files
+                                Click test-trace.log    // #1에서 지정한 guest / guest 입력
 
 3.6 challenge: show chat users
 
