@@ -1,8 +1,5 @@
 # learning-rabbitmq
-* A personal repo to learn RabbitMQ.
+* A summary of a book "RabbitMQ Essentials 2nd edition, 2021"
+* A summary of tutorial "https://www.rabbitmq.com/tutorials"
+* A summary of video training "https://www.linkedin.com/learning/learning-rabbitmq"
 
-# run a docker with rabbitmq
-* docker run -d --name rabbitmq --restart=always -p 5671:5671 -p 5672:5672 -p 15672:15672 -e RABBITMQ_DEFAULT_USER=guest -e RABBITMQ_DEFAULT_PASS=guest rabbitmq:management
-
-# set up venv and install requirements
-* setup.bat
